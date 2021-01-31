@@ -1,0 +1,4 @@
+openpyxl
+xlrd
+msedge-selenium-tools
+selenium
