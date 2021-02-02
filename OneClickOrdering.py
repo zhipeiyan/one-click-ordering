@@ -23,7 +23,7 @@ website = 'run4uhome'
 
 # configuration of your system
 browser = 'Edge'
-browser_driver_path = r'C:\lib\edgxedriver_win64\msedgedriver.exe'
+browser_driver_path = r'C:\lib\edgedriver_win64\msedgedriver.exe'
 
 
 def init_browser_driver(browser_name, driver_path):
