@@ -9,6 +9,7 @@ from selenium.webdriver import Chrome
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.ui import WebDriverWait
+from urllib.parse import urlparse
 
 # configuration of the order file
 order_file = r'C:\path\to\your.xlsx'
@@ -35,39 +36,35 @@ def init_browser_driver(browser_name, driver_path):
         sys.exit('Implement the browser driver initialization of your choice here.')
 
 
-def init_website_settings(retailer_name):
-    # columns_per_person, skip_head_lines, skip_rear_lines, websites
-    # add any retailer powered by Ecwid you want to use to websites
-    if retailer_name == 'run4uhome':
-        return 3, 2, 7, ['run4uhome']
-    elif retailer_name == 'uueat':
-        return 4, 2, 14, ['uueat', 'uucart']
-    else:
-        print('Error! None supported retailer', retailer_name)
-        return 0, 0, 0, []
-
-
-def read_sheet(file, sheet, cols_per_person, skip_head, skip_rear):
+def read_sheet(file, sheet):
     ws = xlrd.open_workbook(file).sheet_by_name(sheet)
     # xlrd can't read hyperlinks from .xlsx files, use openpyxl
     read_links = openpyxl.load_workbook(file)[sheet]
+
+    skip_head_lines = 2
+    columns_per_person = 1
+    while ws.cell_type(skip_head_lines - 2, columns_per_person) == xlrd.XL_CELL_EMPTY:
+        columns_per_person += 1
+
     items = {}
-    for person in range(ws.ncols // cols_per_person):
-        for row in range(skip_head, ws.nrows - skip_rear):
-            # In xlrd, type 2 means number
-            if ws.cell(row, cols_per_person * person + cols_per_person - 2).ctype == 2:
+    for person in range(ws.ncols // columns_per_person):
+        for row in range(skip_head_lines, ws.nrows):
+            if ws.cell_type(row, columns_per_person * person + columns_per_person - 2) == xlrd.XL_CELL_NUMBER:
                 # openpyxl indexed from 1, while xlrd indexed from 0
-                link = read_links.cell(row=row + 1, column=cols_per_person * person + 1).hyperlink
-                count = ws.cell(row, cols_per_person * person + cols_per_person - 2).value
+                link = read_links.cell(row=row + 1, column=columns_per_person * person + 1).hyperlink
+                count = ws.cell(row, columns_per_person * person + columns_per_person - 2).value
                 if link is not None:
                     if link.target in items:
                         items[link.target] += count
                     else:
                         items[link.target] = count
                 else:
-                    print('Error! No url provided for the item:', ws.cell(0, cols_per_person * person).value,
-                          ws.cell(row, cols_per_person * person).value)
-    return items
+                    print('Error! No url provided for the item:', ws.cell(0, columns_per_person * person).value,
+                          ws.cell(row, columns_per_person * person).value)
+            else:
+                break
+    urls = list(set([urlparse(url).scheme + '://' + urlparse(url).netloc + '/' for url in items.keys()]))
+    return items, urls
 
 
 def add_to_bag(url, count):
@@ -83,8 +80,7 @@ if __name__ == '__main__':
     # driver.maximize_window()
     wait = WebDriverWait(driver, 10)
 
-    columns_per_person, skip_head_lines, skip_rear_lines, websites = init_website_settings(retailer)
-    orders = read_sheet(order_file, date, columns_per_person, skip_head_lines, skip_rear_lines)
+    orders, websites = read_sheet(order_file, date)
 
     for item, quantity in orders.items():
         if quantity.is_integer():
@@ -93,9 +89,9 @@ if __name__ == '__main__':
             print('Error! None integer quantity of an item in the order:', item)
 
     if len(websites):
-        driver.get('https://www.' + websites[0] + '.com/cart')
+        driver.get(websites[0] + 'cart')
     for website in websites[1:]:
-        driver.execute_script('window.open("http://www.' + website + '.com/cart","_blank");')
+        driver.execute_script('window.open("' + website + 'cart","_blank");')
 
     input('Done. Press enter to exit.')
     driver.quit()
